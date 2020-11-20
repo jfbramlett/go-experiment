@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/go-logfmt/logfmt v0.4.0 // indirect
 	github.com/gogo/protobuf v1.2.1 // indirect
+	github.com/google/uuid v1.1.2 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/jfbramlett/go-aop v0.0.0-20200209214622-522817f159ac
 	github.com/kisielk/errcheck v1.2.0 // indirect
