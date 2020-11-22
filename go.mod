@@ -5,7 +5,7 @@ go 1.12
 require (
 	github.com/go-logfmt/logfmt v0.4.0 // indirect
 	github.com/gogo/protobuf v1.2.1 // indirect
-	github.com/google/uuid v1.1.2 // indirect
+	github.com/google/uuid v1.1.2
 	github.com/gorilla/mux v1.7.3
 	github.com/jfbramlett/go-aop v0.0.0-20200209214622-522817f159ac
 	github.com/kisielk/errcheck v1.2.0 // indirect
@@ -17,6 +17,7 @@ require (
 	github.com/prometheus/client_golang v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.4.2 // indirect
 	github.com/spf13/cobra v0.0.5
+	github.com/stretchr/testify v1.3.0
 	golang.org/x/crypto v0.0.0-20190611184440-5c40567a22f8 // indirect
 	golang.org/x/net v0.0.0-20190613194153-d28f0bde5980 // indirect
 	golang.org/x/sys v0.0.0-20190616124812-15dcb6c0061f // indirect

@@ -15,8 +15,9 @@ type Validation interface {
 }
 
 // NewExperiment starts a new experiment
-func NewExperiment(refLoader LoadFunc, expLoader LoadFunc, validator Validation) Experiment {
-	return &experiment{uniqueID: uuid.New().String(), validator: validator, refFunc: refLoader, expFunc: expLoader}
+func NewExperiment(named string, refLoader LoadFunc, expLoader LoadFunc, validator Validation, reporter Reporter) Experiment {
+	return &experiment{named: named, uniqueID: uuid.New().String(), validator: validator, reporter: reporter,
+		refFunc: refLoader, expFunc: expLoader}
 }
 
 // Experiment is an interface used for tracking an experiment
@@ -25,55 +26,65 @@ type Experiment interface {
 	Run(ctx context.Context) (interface{}, error)
 }
 
+type experimentResult struct {
+	data interface{}
+	err  error
+	dur  time.Duration
+}
+
+func (e *experimentResult) HasError() bool {
+	return e.err != nil
+}
+
+func newExperimentResult(data interface{}, err error, dur time.Duration) *experimentResult {
+	return &experimentResult{data: data, err: err, dur: dur}
+}
+
 type experiment struct {
-	uniqueID    string
-	refFunc     LoadFunc
-	expFunc     LoadFunc
-	validator   Validation
-	start       time.Time
-	expDuration time.Duration
-	refDuration time.Duration
-	refData     interface{}
-	expData     interface{}
+	uniqueID  string
+	named     string
+	reporter  Reporter
+	refFunc   LoadFunc
+	expFunc   LoadFunc
+	validator Validation
+	expResult *experimentResult
+	refResult *experimentResult
 }
 
 func (e *experiment) Run(ctx context.Context) (interface{}, error) {
-	e.start = time.Now()
 	go func(ctx context.Context) {
+		start := time.Now()
 		data, err := e.expFunc(ctx)
-		e.recordExperimentResult(ctx, data, err)
+		e.expResult = newExperimentResult(data, err, time.Since(start))
+		e.validateExperiment(ctx)
 	}(ctx)
 
+	start := time.Now()
 	data, err := e.refFunc(ctx)
-	return e.recordReferencetResult(ctx, data, err)
-}
-
-func (e *experiment) recordExperimentResult(ctx context.Context, data interface{}, err error) {
-	e.expDuration = time.Since(e.start)
-	if err != nil {
-		e.expData = err
-	} else {
-		e.expData = data
-	}
-	if e.expData != nil && e.refData != nil {
-		go e.validateExperiment(ctx)
-	}
-}
-
-func (e *experiment) recordReferencetResult(ctx context.Context, data interface{}, err error) (interface{}, error) {
-	e.refDuration = time.Since(e.start)
-	if err != nil {
-		e.refData = err
-	} else {
-		e.refData = data
-	}
-	if e.expData != nil && e.refData != nil {
-		go e.validateExperiment(ctx)
-	}
-
+	e.refResult = newExperimentResult(data, err, time.Since(start))
+	e.validateExperiment(ctx)
 	return data, err
 }
 
 func (e *experiment) validateExperiment(ctx context.Context) {
-
+	if e.refResult != nil && e.expResult != nil {
+		go func() {
+			if e.expResult.HasError() || e.refResult.HasError() {
+				var err error
+				if e.expResult.HasError() {
+					err = e.expResult.err
+				}
+				if e.refResult.HasError() {
+					err = e.refResult.err
+				}
+				e.reporter.Error(ctx, e.named, e.uniqueID, err)
+				return
+			}
+			if err := e.validator.Validate(e.refResult.data, e.expResult.data); err != nil {
+				e.reporter.Failure(ctx, e.named, e.uniqueID, err)
+				return
+			}
+			e.reporter.Success(ctx, e.named, e.uniqueID)
+		}()
+	}
 }
