@@ -2,6 +2,8 @@ package experiment
 
 import (
 	"context"
+	"github.com/jfbramlett/go-experiment/pkg/logging"
+	"github.com/sirupsen/logrus"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,17 +54,21 @@ type experiment struct {
 }
 
 func (e *experiment) Run(ctx context.Context) (interface{}, error) {
-	go func(ctx context.Context) {
-		start := time.Now()
-		data, err := e.expFunc(ctx)
-		e.expResult = newExperimentResult(data, err, time.Since(start))
-		e.validateExperiment(ctx)
-	}(ctx)
+	runCtx, _ := logging.UpdateInContext(ctx, logrus.Fields{"experiment": e.named, "experimentUUID": e.uniqueID})
 
+	go func(ctx context.Context) {
+		expCtx, _ := logging.UpdateInContext(ctx, logrus.Fields{"experimentPath": "experiment"})
+		start := time.Now()
+		data, err := e.expFunc(expCtx)
+		e.expResult = newExperimentResult(data, err, time.Since(start))
+		e.validateExperiment(expCtx)
+	}(runCtx)
+
+	refCtx, _ := logging.UpdateInContext(ctx, logrus.Fields{"experimentPath": "reference"})
 	start := time.Now()
-	data, err := e.refFunc(ctx)
+	data, err := e.refFunc(refCtx)
 	e.refResult = newExperimentResult(data, err, time.Since(start))
-	e.validateExperiment(ctx)
+	e.validateExperiment(refCtx)
 	return data, err
 }
 
@@ -77,14 +83,14 @@ func (e *experiment) validateExperiment(ctx context.Context) {
 				if e.refResult.HasError() {
 					err = e.refResult.err
 				}
-				e.reporter.Error(ctx, e.named, e.uniqueID, err)
+				e.reporter.Error(ctx, e.named, e.uniqueID, err, e.refResult.dur, e.expResult.dur)
 				return
 			}
 			if err := e.validator.Validate(e.refResult.data, e.expResult.data); err != nil {
-				e.reporter.Failure(ctx, e.named, e.uniqueID, err)
+				e.reporter.Failure(ctx, e.named, e.uniqueID, err, e.refResult.dur, e.expResult.dur)
 				return
 			}
-			e.reporter.Success(ctx, e.named, e.uniqueID)
+			e.reporter.Success(ctx, e.named, e.uniqueID, e.refResult.dur, e.expResult.dur)
 		}()
 	}
 }
